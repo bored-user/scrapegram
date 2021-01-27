@@ -1,0 +1,4 @@
+lib
+lib64
+share/python-wheels
+__pycache__
