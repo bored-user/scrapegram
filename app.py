@@ -3,9 +3,13 @@ import asyncio
 import hashlib
 import json
 import os
+import shutil
 import time
+import urllib
+import uuid
 
 import pyppeteer
+import requests
 
 import exceptions
 from flatten import flatten
@@ -15,32 +19,24 @@ prefix = 'https://instagram.com'
 abspath = os.path.dirname(os.path.abspath(__file__))
 
 
-def parse_args(login):
+def parse_args():
     parser = argparse.ArgumentParser(
         description='Scrape all media from a public Instagram account and print their links/ download it all')
     parser.add_argument('-u', '--username', required=True, type=str,
                         help="(Public) Instagram account handle (e.g 'apple')")
-    parser.add_argument('-d', '--download', default='False', type=str,
-                        help="'True' downloads all media to the path specified on '-p'. 'False' only prints links on the terminal")
     parser.add_argument('-p', '--path', type=str,
-                        default=f'{abspath}/downloads/[[[user]]]', help='Path to download media into. Defaults to $PWD/downloads/[user]')
+                        default=f'{abspath}/media', help=f'Path to download media into. Defaults to {abspath}/media/[user] or {abspath}/media')
+    parser.add_argument('--save', type=str, choices=['text', 'media', 'none'], default='media',
+                        help=f"Info saving mode. Uses path provided on --path or default ('{abspath}/media' if --save is 'text' else '{abspath}/media/[user]'). 'text' creates a text file with the links; 'media' downloads the files; 'none' prints the links on terminal. Default: 'media'")
     parser.add_argument('-e', '--email', type=str, default='',
-                        help="Email address or username (in order to login & access private accounts of people you're following)")
+                        help="Your account's email address or username")
     parser.add_argument('-s', '--secret', type=str, default='',
-                        help="Your account's password (in order to login & access private accounts of people you're following)")
+                        help="Your account's password")
+    parser.add_argument('-n', '--naming', choices=['unique', 'sequential', 'original'], default='sequential',
+                        type=str, help="File saving method. Ignored completely if --save is not set to 'media'")
     args = parser.parse_args()
 
-    try:
-        assert args.download == 'False' or args.download == 'True'
-    except AssertionError:
-        log("-d must be either 'True' or 'False'", 'error')
-
-    if args.email and args.secret:
-        login['email'], login['password'] = args.email, args.secret
-    elif args.email != '' or args.secret != '':
-        log('ignoring login info completely', 'warn', False)
-
-    return args.username, args.download, args.path.replace('[[[user]]]', args.username)
+    return args.username, f'{args.path}/{args.username}' if args.save == 'media' else args.path, args.save, args.naming, args.email, args.secret
 
 
 def log(msg: str, type: str, quit: bool = True):
@@ -61,7 +57,6 @@ async def login(info: dict):
     with open(f'{abspath}/config.json', 'w') as f:
         json.dump(info, f)
 
-    # await wait_loading('nav', page)
     time.sleep(10)
     await page.close()
     log('logged in', 'log', False)
@@ -75,7 +70,7 @@ async def block_popup(page):
 
 
 async def scroll_and_fetch(page):
-    async def parse_triplets(triplet):
+    async def parse_triplet(triplet):
         urls = []
 
         for media in await triplet.querySelectorAll('.v1Nh3.kIKUG._bz0w'):
@@ -94,7 +89,11 @@ async def scroll_and_fetch(page):
 
                     urls.append(await media.querySelectorEval('.FFVAD' if await media.querySelector('.FFVAD') else 'video', 'm => m.src'))
             elif video:
-                urls.append(await main.querySelectorEval('video', 'm => m.src'))
+                url = await main.querySelectorEval('video', 'm => m.src')
+                if 'blob' in url:
+                    continue
+
+                urls.append(url)
             elif photo:
                 urls.append(await main.querySelectorEval('.FFVAD', 'm => m.src'))
 
@@ -123,7 +122,7 @@ async def scroll_and_fetch(page):
         if len(triplets) * 3 >= posts:
             break
 
-    return [await parse_triplets(triplet) for triplet in triplets.values()]
+    return [await parse_triplet(triplet) for triplet in triplets.values()]
 
 
 async def wait_loading(query, page):
@@ -140,31 +139,68 @@ async def wait_loading(query, page):
 
 async def main():
     global browser
-    _login = {}
-    user, download, path = parse_args(_login)
+
+    def save_media(url, count):
+        if not save_mode == 'media':
+            if save_mode == 'text':
+                with open(f'{path}/{user}.txt', 'a') as f:
+                    f.write(f'{url}\n')
+            else:
+                print(url)
+        else:
+            parsed_url = urllib.parse.urlparse(url)
+            # if parsed_url.scheme == 'blob':
+                # print('blob scheme here!', url)
+            # else:
+            r = requests.get(url, stream=True)
+            if not r.ok:
+                raise exceptions.MediaRetrievalError(r.reason)
+
+            r.raw.decode_content = True
+            name = ''
+
+            if naming == 'unique':
+                name == uuid.uuid4()
+            elif naming == 'sequential':
+                name == count
+            elif naming == 'original':
+                name = os.path.splitext(parsed_url.path)[0].split('/')[-1]
+
+            with open(f"{path}/{name}{os.path.splitext(parsed_url.path)[1]}", 'wb') as f:
+                shutil.copyfileobj(r.raw, f)
+
+    user, path, save_mode, naming, email, password = parse_args()
+    login_info = {}
+    if email and password:
+        login_info['email'], login_info['password'] = email, password
+    elif email != '' or password != '':
+        log('ignoring login info completely', 'warn', False)
 
     browser = await pyppeteer.launch({'headless': False})
     page = await browser.newPage()
 
     try:
-        if _login:
-            await login(_login)
+        if login_info:
+            await login(login_info)
 
         await page.goto(f'{prefix}/{user}')
-
         body = await page.evaluate('() => document.body.textContent')
         if "Sorry, this page isn't available." in body:
             raise exceptions.InvalidUsernameError()
         elif 'This Account is Private' in body:
             raise exceptions.PrivateAccountError()
+
+        await page.evaluate("() => document.body.setAttribute('style', 'overflow: auto !important;')")
+        await block_popup(page)
+
+        urls = flatten(await scroll_and_fetch(page), str)
+        if not save_mode == 'none' and not os.path.isdir(path):
+            os.makedirs(path)
+
+        [save_media(urls[i], i + 1) for i in range(len(urls))]
+
     except Exception as e:
         log(getattr(e, 'message', repr(e)), 'error')
-
-    await page.evaluate("() => document.body.setAttribute('style', 'overflow: auto !important;')")
-    await block_popup(page)
-    urls = flatten(await scroll_and_fetch(page), str)
-    print(urls)
-    print(len(urls))
 
 
 if __name__ == '__main__':
