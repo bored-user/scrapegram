@@ -1,4 +1,4 @@
-# scrapergram
+# scrapegram
 
 Python Instagram scraping application.
 
