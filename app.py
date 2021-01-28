@@ -123,7 +123,7 @@ async def scroll_and_fetch(page):
         if len(triplets) * 3 >= posts:
             break
 
-    page.close()
+    await page.close()
     return [await parse_triplets(triplet) for triplet in triplets.values()]
 
 
