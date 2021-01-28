@@ -8,6 +8,7 @@ import time
 import pyppeteer
 
 import exceptions
+from flatten import flatten
 
 browser = None
 prefix = 'https://instagram.com'
@@ -36,7 +37,7 @@ def parse_args(login):
 
     if args.email and args.secret:
         login['email'], login['password'] = args.email, args.secret
-    elif (not args.email and args.secret) or (args.email and not args.secret):
+    elif args.email != '' or args.secret != '':
         log('ignoring login info completely', 'warn', False)
 
     return args.username, args.download, args.path.replace('[[[user]]]', args.username)
@@ -49,7 +50,9 @@ def log(msg: str, type: str, quit: bool = True):
         exit(1)
 
 
-async def login(info: dict, page):
+async def login(info: dict):
+    page = await browser.newPage()
+
     await page.goto(f'{prefix}/accounts/login')
     await (await wait_loading('input[name=username]', page)).type(info['email'])
     await (await wait_loading('input[name=password]', page)).type(info['password'])
@@ -58,6 +61,9 @@ async def login(info: dict, page):
     with open(f'{abspath}/config.json', 'w') as f:
         json.dump(info, f)
 
+    # await wait_loading('nav', page)
+    time.sleep(10)
+    await page.close()
     log('logged in', 'log', False)
 
 
@@ -74,10 +80,9 @@ async def scroll_and_fetch(page):
 
         for media in await triplet.querySelectorAll('.v1Nh3.kIKUG._bz0w'):
             page = await browser.newPage()
-            await page.setViewport({'width': 1920, 'height': 1080})
-            await page.goto(f"{prefix}{await media.querySelectorEval('a', 'a => a.href')}")
+            await page.goto(await media.querySelectorEval('a', 'a => a.href'))
 
-            main = page.querySelector('article')
+            main = await page.querySelector('article')
             presentation = await main.querySelector('div[role=presentation]')
             video = await main.querySelector('video')
             photo = await main.querySelector('.FFVAD')
@@ -87,36 +92,39 @@ async def scroll_and_fetch(page):
                     if await page.evaluate('m => m.children.length == 0', media):
                         continue
 
-                    urls.append(await main.querySelectorEval('.FFVAD' if await media.querySelector('.FFVAD') else 'video', 'm => m.src'))
+                    urls.append(await media.querySelectorEval('.FFVAD' if await media.querySelector('.FFVAD') else 'video', 'm => m.src'))
             elif video:
                 urls.append(await main.querySelectorEval('video', 'm => m.src'))
             elif photo:
                 urls.append(await main.querySelectorEval('.FFVAD', 'm => m.src'))
 
+            await page.close()
+
         return urls
 
     triplets = {}
-    await wait_loading('footer', page)
+    await wait_loading('.Nnq7C.weEfm', page)
+    posts = await page.querySelectorEval('main header section ul li', "l => Number(l.textContent.replace(/[^0-9]/g, ''))")
 
     while True:
         shown_triplets = await page.querySelectorAll('.Nnq7C.weEfm')
         await page.screenshot({'path': 'realtime.png'})
 
         for triplet in shown_triplets:
-            md5 = hashlib.md5((await page.evaluate('t => t.textContent', triplet)).encode()).hexdigest()
+            md5 = hashlib.md5((await page.evaluate('t => t.innerHTML', triplet)).encode()).hexdigest()
 
             if md5 in triplets:
                 continue
             triplets[md5] = triplet
 
-        await page.querySelectorEval('footer', 'f => f.scrollIntoView(false)')
+        await page.evaluate('t => t.scrollIntoView(false)', shown_triplets[-1])
         await block_popup(page)
-        if await page.querySelectorAll('.Nnq7C.weEfm') == shown_triplets:
+
+        if len(triplets) * 3 >= posts:
             break
 
-        time.sleep(0.5)
-
-    return [await parse_triplets(triplet) for triplet in triplets]
+    page.close()
+    return [await parse_triplets(triplet) for triplet in triplets.values()]
 
 
 async def wait_loading(query, page):
@@ -136,16 +144,14 @@ async def main():
     _login = {}
     user, download, path = parse_args(_login)
 
-    browser = await pyppeteer.launch()
+    browser = await pyppeteer.launch({'headless': False})
     page = await browser.newPage()
-
-    await page.setViewport({'width': 1920, 'height': 1080})
 
     try:
         if _login:
-            await login(_login, page)
-        else:
-            await page.goto(f'{prefix}/{user}')
+            await login(_login)
+
+        await page.goto(f'{prefix}/{user}')
 
         body = await page.evaluate('() => document.body.textContent')
         if "Sorry, this page isn't available." in body:
@@ -157,7 +163,9 @@ async def main():
 
     await page.evaluate("() => document.body.setAttribute('style', 'overflow: auto !important;')")
     await block_popup(page)
-    print(await scroll_and_fetch(page))
+    urls = flatten(await scroll_and_fetch(page), str)
+    print(urls)
+    print(len(urls))
 
 
 if __name__ == '__main__':
