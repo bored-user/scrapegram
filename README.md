@@ -10,12 +10,12 @@ $ python3 app.py -u apple
 ```
 
 Optional arguments:
-* `--save`: Can be:
+* `--save`:
     - `media`: downloads all photo/ video on the specified `--path` location (*default*)
     - `text`: will save a text file (on `--path` location) with the links
     - `none`: will only echo out each link on the terminal
 * `-p` (`--path`): Specifies the path where the media will be saved into (defaults to `$PWD/media/[username]` if `--save` is set to `media`, else `$PWD/media/[username].txt`).
-* `-n` (`--naming`): Can be:
+* `-n` (`--naming`):
     - `unique`: uses `uuid.uuid4()` to generate the file names
     - `sequential`: results in `1.[ext]`, `2.[ext]`, `3.[ext]`, etc. (where `[ext]` is the original file's extension) (*default*)
     - `original`: uses the original Instagram server-stored file name
