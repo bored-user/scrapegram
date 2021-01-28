@@ -34,9 +34,10 @@ def parse_args():
                         help="Your account's password")
     parser.add_argument('-n', '--naming', choices=['unique', 'sequential', 'original'], default='sequential',
                         type=str, help="File saving method. Ignored completely if --save is not set to 'media'")
+    parser.add_argument('---not-headless', nargs='?', default=False, help='Controls Chromium (used by `pyppeteer`) headlesness.')
     args = parser.parse_args()
 
-    return args.username, f'{args.path}/{args.username}' if args.save == 'media' else args.path, args.save, args.naming, args.email, args.secret
+    return args.username, f'{args.path}/{args.username}' if args.save == 'media' else args.path, args.save, args.naming, args.email, args.secret, args.not_headless
 
 
 def log(msg: str, type: str, quit: bool = True):
@@ -169,14 +170,14 @@ async def main():
             with open(f"{path}/{name}{os.path.splitext(parsed_url.path)[1]}", 'wb') as f:
                 shutil.copyfileobj(r.raw, f)
 
-    user, path, save_mode, naming, email, password = parse_args()
+    user, path, save_mode, naming, email, password, not_headless = parse_args()
     login_info = {}
     if email and password:
         login_info['email'], login_info['password'] = email, password
     elif email != '' or password != '':
         log('ignoring login info completely', 'warn', False)
 
-    browser = await pyppeteer.launch({'headless': False})
+    browser = await pyppeteer.launch({'headless': False if not_headless == None else True})
     page = await browser.newPage()
 
     try:

@@ -11,7 +11,8 @@
             "program": "${workspaceFolder}/app.py",
             "args": [
                 "-u",
-                "apple"
+                "apple",
+                "---not-headless"
             ],
             "console": "integratedTerminal"
         }
