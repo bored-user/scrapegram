@@ -1,6 +1,6 @@
 # scrapergram
 
-Pyhon Instagram scraping application.
+Python Instagram scraping application.
 
 ### Usage
 
