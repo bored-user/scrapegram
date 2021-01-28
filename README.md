@@ -39,7 +39,7 @@ $ python3 app.py -u dexter -e morgan.debra@mmpd.us -s FUCKING PASSWORD # logs in
 
 ### P.S.
 
-1. Obviously, `--save none` is very much faster than the other two - since it doesn't have to write/ download and additional file.
+1. Obviously, `--save none` is much faster than the other two - since it doesn't have to write/ download and additional file.
 2. I'd like to left it noted the fact that it's harder and harder for the script to work 100% with no login. You can try, but I can't garantee. Tip: open `realtime.png` image (that will be generated while the script is running) and keep refreshing it to see what's going on. If you see a big "ERROR - Try again later" message on the Instagram page, it failed.
 3. Errors will be thrown if one tries to access a private account (if you can't view it).
 4. Errors will be thrown if one inputs an unexistant user.
