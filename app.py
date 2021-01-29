@@ -161,9 +161,9 @@ async def main():
             name = ''
 
             if naming == 'unique':
-                name == uuid.uuid4()
+                name = uuid.uuid4()
             elif naming == 'sequential':
-                name == count
+                name = count
             elif naming == 'original':
                 name = os.path.splitext(parsed_url.path)[0].split('/')[-1]
 
