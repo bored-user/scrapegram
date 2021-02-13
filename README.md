@@ -37,10 +37,6 @@ $ python3 app.py -u dexter -e morgan.debra@mmpd.us -s FUCKING PASSWORD # logs in
 
 `requirements.txt` has all the dependencies needed. Install them by running `pip install -r requirements.txt` on your terminal.
 
-### .venv
-
-I uploaded my `.venv` folder with the source code (as one can see above). Therefore, it's much easier to just run `source ./bin/activate` (before `$ python3 app.py`) instead of downloading the modules manually - because they'll be already installed on the virtual enviroment.
-
 ### P.S.
 
 1. Obviously, `--save none` is much faster than the other two - since it doesn't have to write/ download and additional file.
